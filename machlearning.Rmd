@@ -1,0 +1,193 @@
+---
+title: "Human Activity Recognition Project"
+author: "by weisdata"
+date: "September 26, 2015"
+output:
+  html_document:
+    fig_caption: yes
+    fig_height: 6
+    fig_width: 9
+  pdf_document:
+    fig_caption: yes
+---
+
+###*EXECUTIVE SUMMARY*
+
+Qualtified self is a fashionable world wide movement now. Enthusiasts love to take measurements about themselves regularly to improve health, to find patterns in behaviors, or just to have fun. [Groupware@LES](http://groupware.les.inf.puc-rio.br/har) kindly opens their collected data for this Human Activity Recognition Project. In this project, I will conduct a machine learning algorithem to predict the human activity, ie. the manner in which huamn did the exercise.   
+
+To address this problem, I propose the following:
+1. *Data Cleaning*. This will allow me to spot problems, finding outliers, invalid and missing values. 
+2. *Modeling*. This will allow me to quantify the relationship between the transmission types and miles per gallon. 
+
+
+###Data Cleaning                 
+
+The data ([Train Set](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv) and [Test Set](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv)) were collected from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. 
+
+```{r, echo=FALSE, results='hide'}
+training = read.csv("~/Desktop/weisdata-home/machinelearning/pml-training.csv")
+testing = read.csv("~/Desktop/weisdata-home/machinelearning/pml-testing.csv")
+head(training)
+```
+
+```{r, echo=FALSE, results='hide'}
+summary(training)
+training <- training[,-c(12:36,50:59,69:83,87:101,103:112,125:139,141:150)]
+testing <- testing[,-c(12:36,50:59,69:83,87:101,103:112,125:139,141:150)]
+library(caret)
+nsv <- nearZeroVar(training,saveMetrics=TRUE)
+nsv
+# detect: new_window
+training <- training[,-6]
+testing <- testing[,-6]
+
+# check testing str
+str(training)
+str(testing)
+lapply(names(training[,-59]), function(x) class(training[,x])==class(testing[,x])) 
+# index: 45, 57:58 differ types
+class(training[,45])
+testing[,45] <- as.numeric(testing[,45])
+testing[,57] <- as.numeric(testing[,57])
+testing[,58] <- as.numeric(testing[,58])
+
+# factor variables must have the same level in both training and testing
+#index: 2,5
+names(training)
+levels(training[,2]); levels(testing[,2])
+levels(training[,5]); levels(testing[,5])
+training$cvtd_timestamp_date <- vector("integer", length(training$cvtd_timestamp))
+training$cvtd_timestamp_time <- vector("integer", length(training$cvtd_timestamp))
+for(i in 1:length(training$cvtd_timestamp)){
+  date_time <- strsplit(as.character(training$cvtd_timestamp[i]), ' ')
+  training$cvtd_timestamp_date[i] <- date_time[[1]][1]
+  training$cvtd_timestamp_time[i] <- strsplit(date_time[[1]][2],":")[[1]][1]
+}
+training$cvtd_timestamp_date <- sapply(training$cvtd_timestamp_date, function(x) as.factor(x))
+training$cvtd_timestamp_time <- sapply(training$cvtd_timestamp_time, function(x) as.factor(x))
+training <- training[,-5]
+# apply to testing set
+testing$cvtd_timestamp_date <- vector("integer", length(testing$cvtd_timestamp))
+testing$cvtd_timestamp_time <- vector("integer", length(testing$cvtd_timestamp))
+
+for(i in 1:length(testing$cvtd_timestamp)){
+  date_time <- strsplit(as.character(testing$cvtd_timestamp[i]), ' ')
+  testing$cvtd_timestamp_date[i] <- date_time[[1]][1]
+  testing$cvtd_timestamp_time[i] <- strsplit(date_time[[1]][2],":")[[1]][1]
+}
+testing$cvtd_timestamp_date <- sapply(testing$cvtd_timestamp_date, function(x) as.factor(x))
+testing$cvtd_timestamp_time <- sapply(testing$cvtd_timestamp_time, function(x) as.factor(x))
+testing <- testing[,-5]
+# delete the first column, the serial number, meaningless
+training <- training[,-1]
+testing <- testing[,-1]
+```
+
+Exploring the dataset, we can find out that there are some `r dim(training)[1]` samples with `r dim(training)[2]` available features in the training set while `r dim(testing)[2]` cases are waiting to be predicted in the testing set. After summarizing the data statistics by `summary(training)`, I spot 67 variables with 19216 NA's and 33 variables with 19216 blank value by the naked eyes. Too many observations (`r round(19216/dim(training), 2)`) are missing in these 100 variables. Besides, implementing `nearZeroVar(training,saveMetrics=TRUE)` to detect one near-zero variance variable. 
+
+Moreover, factor variable `cvtd_timestamp` has different levels in training and test sets, respectively. Thus, I split it into the date(`cvtd_timestamp_date`) and time(`cvtd_timestamp_time`) and delete the original one in both training and test sets. Also, the first column represents the serial number, revealing no information about the date. 
+
+As such, it is resonable to delete these useless variables. By now, the dimension of the feature space is reduced to 58 while 1 of response variable for modeling in the next part. 
+
+
+
+###Modeling
+
+In this part, I first slice the original training set into `trainS` and `testS` sets for model building and accuracy validation. Then it is time to build models.
+
+```{r, results='hide', tidy=TRUE}
+set.seed(1010)
+inTrain <- createDataPartition(y=training$classe, p=0.60, list=FALSE)
+trainS <- training[inTrain,]
+testS <- training[-inTrain,]
+dim(trainS)
+```
+
+I conduct three classification algorithems to learning, decision tree, bagging and random forest. The models statistics comparision is shown in  Table \ref{tab:mod_comparison}. From the comparison, we can find the ideal model is the random forest, with a rather high accuracy rate of 99.92%.
+
+```{r, results='hide', tidy=TRUE}
+# Decision tree
+library(caret)
+set.seed(10)
+modfit_rpart <- train(classe ~ .,method="rpart",data=trainS)
+# Bagging
+library(party)
+set.seed(101010)
+modfit_bag <- bag(trainS[,-57], trainS$classe, B = 10,
+               bagControl = bagControl(fit = ctreeBag$fit,
+                                       predict = ctreeBag$pred,
+                                       aggregate = ctreeBag$aggregate))
+# Random Forest
+library(randomForest)
+set.seed(10101010)
+modrf <- randomForest(classe ~. , data=trainS, importance=T)
+```
+
+```{r, echo=FALSE, tidy=TRUE, results='hide'}
+pred_rpart <- predict(modfit_rpart, testS[,-57])
+cm_rpart <- confusionMatrix(pred_rpart, testS[,57])$overall
+pred_bag <- predict(modfit_bag, testS[,-57])
+cm_bag <- confusionMatrix(pred_bag, testS[,57])$overall
+predrf <- predict(modrf, testS[,-57], type = "class")
+cm_rf <- confusionMatrix(predrf, testS[,57])$overall
+
+suppressPackageStartupMessages(library(pander))
+panderOptions('keep.line.breaks', TRUE)
+mod_comparison <- data.frame(Model=c("Decision Tree", "Bagging", "Random Forest"),
+                             Accuracy=c(cm_rpart[[1]], cm_bag[[1]],cm_rf[[1]]),
+                             CI=c(paste(round(cm_rpart[[3]],4),round(cm_rpart[[4]],4),sep=", "),
+                                  paste(round(cm_bag[[3]],4),round(cm_bag[[4]],4),sep=", "),
+                                  paste(round(cm_rf[[3]],4),round(cm_rf[[4]],4),sep=", ")),
+                             NIR=c(cm_rpart[[5]],cm_bag[[5]],cm_rf[[5]]),
+                             Pvalue=c(cm_rpart[[6]],cm_bag[[6]],cm_rf[[6]]),
+                             Kappa=c(cm_rpart[[2]],cm_bag[[2]],cm_rf[[2]]),
+                             Mpvalue=c(cm_rpart[[7]],cm_bag[[7]],cm_rf[[7]]))
+
+names(mod_comparison) <- c("Model", "Accuracy", "95% CI", "No Info Rate",
+                           "P-Value[Acc > NIR]", "Kappa", "Mcnemar's P-Value" )
+
+
+```
+
+```{r, echo=FALSE}
+panderOptions('round', 4)
+pander(mod_comparison, caption="Models Overall Statistics Comparison\\label{tab:mod_comparison}")
+```
+
+Specifically, in these models, there is no need for cross-validation or a separate test set to get an unbiased estimate of the test set error. It is estimated internally. Take random forest for example, during the run, as follows:
+
+*Each tree is constructed using a different bootstrap sample from the original data. About one-third of the cases are left out of the bootstrap sample and not used in the construction of the kth tree.
+
+*Put each case left out in the construction of the kth tree down the kth tree to get a classification. In this way, a test set classification is obtained for each case in about one-third of the trees. At the end of the run, take j to be the class that got most of the votes every time case n was oob. The proportion of times that j is not equal to the true class of n averaged over all cases is the oob error estimate. This has proven to be unbiased in many tests.
+
+Based on the random forest model, furthermore, I dig into the features to refine the model. Figure \ref{fig:varimp} reveals the top important variables, which is a clue for further features reduction. Therefore, I pick up the top 25 most important variable to conduct a new random forest model. 
+
+```{r, varImp, fig.cap="Variable Importance Plot\\label{fig:varimp}", echo=FALSE}
+varImp <- importance(modrf)
+varImpPlot(modrf, type=1, main="Variable Importance Plot",cex = 0.9)
+```
+
+The model reaches a even high accuracy rate of 99.96% and a low Out of Sample(OOB) error estimate of 0.11%. From Figure \ref{fig:oobplot}, we can find that the OOB errors are decreasing as the number of trees increases. 
+
+```{r, echo=FALSE}
+varImp25 <- names(sort(varImp[,6], decreasing=T))[1:25]
+set.seed(1010101010)
+modrf_varImp25 <- randomForest(classe ~. , data=trainS[,c(varImp25, "classe")], importance=T)
+modrf_varImp25
+```
+
+```{r, OOBPlot, fig.cap="Out-of-bag (OOB) Error Estimate\\label{fig:oobplot}", echo=FALSE}
+plot(modrf_varImp25, main ="Out-of-bag (OOB) error estimate")
+legend("topright", colnames(modrf$err.rate),col=1:6,cex=0.8,fill=1:6)
+```
+
+###Prediction
+Sum up, the final model is the random forest with the selected 25 predictors. 
+The final part of this project is to predict the given 20 observations in the test set. 
+```{r, echo=FALSE}
+predrf_test_varImp25 <- predict(modrf_varImp25, testing[,varImp25], type = "class")
+predrf_test_varImp25
+```
+
+
+
