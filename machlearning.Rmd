@@ -14,6 +14,7 @@ output:
 Qualtified self is a fashionable world wide movement now. Enthusiasts love to take measurements about themselves regularly to improve health, to find patterns in behaviors, or just to have fun. [Groupware@LES](http://groupware.les.inf.puc-rio.br/har) kindly opens their collected data for this Human Activity Recognition Project. In this project, I will conduct a machine learning algorithem to predict the human activity, ie. the manner in which huamn did the exercise.   
 
 To address this problem, I propose the following:
+
 1. *Data Cleaning*. This will allow me to spot problems, finding outliers, invalid and missing values. 
 2. *Modeling*. This will allow me to build models to find information and patterns in the data and do predictions.
 
@@ -168,11 +169,10 @@ pander(mod_comparison, caption="Models Overall Statistics Comparison\\label{tab:
 
 Specifically, in these models, there is no need for cross-validation or a separate test set to get an unbiased estimate of the test set error. It is estimated internally. Take random forest for example, during the run, as follows:
 
-*Each tree is constructed using a different bootstrap sample from the original data. About one-third of the cases are left out of the bootstrap sample and not used in the construction of the kth tree.
+* Each tree is constructed using a different bootstrap sample from the original data. About one-third of the cases are left out of the bootstrap sample and not used in the construction of the kth tree.
+* Put each case left out in the construction of the kth tree down the kth tree to get a classification. In this way, a test set classification is obtained for each case in about one-third of the trees. At the end of the run, take j to be the class that got most of the votes every time case n was oob. The proportion of times that j is not equal to the true class of n averaged over all cases is the oob error estimate. This has proven to be unbiased in many tests.
 
-*Put each case left out in the construction of the kth tree down the kth tree to get a classification. In this way, a test set classification is obtained for each case in about one-third of the trees. At the end of the run, take j to be the class that got most of the votes every time case n was oob. The proportion of times that j is not equal to the true class of n averaged over all cases is the oob error estimate. This has proven to be unbiased in many tests.
-
-Based on the random forest model, furthermore, I dig into the features to refine the model. Figure *Variable Importance Plot* reveals the top important variables, which is a clue for further features reduction. Therefore, I pick up the top 25 most important variable to conduct a new random forest model. 
+Based on the random forest model, furthermore, I dig into the features to refine the model. Figure *Variable Importance Plot* reveals the top important variables, which are clues for further features reduction. Therefore, I pick up the top 25 most important variable to conduct a new random forest model. 
 
 ```{r, varImp, fig.cap="Variable Importance Plot\\label{fig:varimp}", echo=FALSE, warning=FALSE, message=FALSE}
 varImp <- importance(modrf)
