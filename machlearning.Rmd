@@ -1,7 +1,7 @@
 ---
 title: "Human Activity Recognition Project"
 author: "by weisdata"
-date: "September 26, 2015"
+date: "09-26-2015"
 output:
   html_document:
     fig_caption: yes
@@ -15,20 +15,34 @@ Qualtified self is a fashionable world wide movement now. Enthusiasts love to ta
 
 To address this problem, I propose the following:
 1. *Data Cleaning*. This will allow me to spot problems, finding outliers, invalid and missing values. 
-2. *Modeling*. This will allow me to quantify the relationship between the transmission types and miles per gallon. 
+2. *Modeling*. This will allow me to build models to find information and patterns in the data and do predictions.
 
 
 ###Data Cleaning                 
 
-The data ([Train Set](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv) and [Test Set](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv)) were collected from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. 
+The data ([Train Set](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv) and [Test Set](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv) ) were collected from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. 
 
-```{r, echo=FALSE, results='hide', warning=FALSE}
+```{r, echo=FALSE, results='hide', warning=FALSE, message=FALSE}
+library(lattice)
+library(ggplot2)
+library(sandwich)
+library(zoo)
+library(base)
+library(strucchange)
+library(stats4)
+library(modeltools)
+library(mvtnorm)
+library(grid)
+```
+
+
+```{r, echo=FALSE, results='hide', warning=FALSE, message=FALSE}
 training = read.csv("~/Desktop/weisdata-home/machinelearning/pml-training.csv")
 testing = read.csv("~/Desktop/weisdata-home/machinelearning/pml-testing.csv")
 head(training)
 ```
 
-```{r, echo=FALSE, results='hide', warning=FALSE}
+```{r, echo=FALSE, results='hide', warning=FALSE, message=FALSE}
 summary(training)
 training <- training[,-c(12:36,50:59,69:83,87:101,103:112,125:139,141:150)]
 testing <- testing[,-c(12:36,50:59,69:83,87:101,103:112,125:139,141:150)]
@@ -93,7 +107,7 @@ As such, it is resonable to delete these useless variables. By now, the dimensio
 
 In this part, I first slice the original training set into `trainS` and `testS` sets for model building and accuracy validation. Then it is time to build models.
 
-```{r, results='hide', tidy=TRUE, warning=FALSE}
+```{r, results='hide', tidy=TRUE, warning=FALSE, message=FALSE}
 set.seed(1010)
 inTrain <- createDataPartition(y=training$classe, p=0.60, list=FALSE)
 trainS <- training[inTrain,]
@@ -101,9 +115,9 @@ testS <- training[-inTrain,]
 dim(trainS)
 ```
 
-I conduct three classification algorithems to learning, decision tree, bagging and random forest. The models statistics comparision is shown in  Table \ref{tab:mod_comparison}. From the comparison, we can find the ideal model is the random forest, with a rather high accuracy rate of 99.92%.
+I conduct three classification algorithems to learning, decision tree, bagging and random forest. The models statistics comparision is shown in  the following table. From the comparison, we can find the ideal model is the random forest, with a rather high accuracy rate of 99.92%.
 
-```{r, results='hide', tidy=TRUE, warning=FALSE}
+```{r, results='hide', tidy=TRUE, warning=FALSE, message=FALSE}
 # Decision tree
 library(caret)
 set.seed(10)
@@ -121,7 +135,7 @@ set.seed(10101010)
 modrf <- randomForest(classe ~. , data=trainS, importance=T)
 ```
 
-```{r, echo=FALSE, tidy=TRUE, results='hide', warning=FALSE}
+```{r, echo=FALSE, tidy=TRUE, results='hide', warning=FALSE, message=FALSE}
 pred_rpart <- predict(modfit_rpart, testS[,-57])
 cm_rpart <- confusionMatrix(pred_rpart, testS[,57])$overall
 pred_bag <- predict(modfit_bag, testS[,-57])
@@ -147,7 +161,7 @@ names(mod_comparison) <- c("Model", "Accuracy", "95% CI", "No Info Rate",
 
 ```
 
-```{r, echo=FALSE, warning=FALSE}
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
 panderOptions('round', 4)
 pander(mod_comparison, caption="Models Overall Statistics Comparison\\label{tab:mod_comparison}")
 ```
@@ -158,23 +172,23 @@ Specifically, in these models, there is no need for cross-validation or a separa
 
 *Put each case left out in the construction of the kth tree down the kth tree to get a classification. In this way, a test set classification is obtained for each case in about one-third of the trees. At the end of the run, take j to be the class that got most of the votes every time case n was oob. The proportion of times that j is not equal to the true class of n averaged over all cases is the oob error estimate. This has proven to be unbiased in many tests.
 
-Based on the random forest model, furthermore, I dig into the features to refine the model. Figure \ref{fig:varimp} reveals the top important variables, which is a clue for further features reduction. Therefore, I pick up the top 25 most important variable to conduct a new random forest model. 
+Based on the random forest model, furthermore, I dig into the features to refine the model. Figure *Variable Importance Plot* reveals the top important variables, which is a clue for further features reduction. Therefore, I pick up the top 25 most important variable to conduct a new random forest model. 
 
-```{r, varImp, fig.cap="Variable Importance Plot\\label{fig:varimp}", echo=FALSE, warning=FALSE}
+```{r, varImp, fig.cap="Variable Importance Plot\\label{fig:varimp}", echo=FALSE, warning=FALSE, message=FALSE}
 varImp <- importance(modrf)
 varImpPlot(modrf, type=1, main="Variable Importance Plot",cex = 0.9)
 ```
 
-The model reaches a even high accuracy rate of 99.96% and a low Out of Sample(OOB) error estimate of 0.11%. From Figure \ref{fig:oobplot}, we can find that the OOB errors are decreasing as the number of trees increases. 
+The model reaches a even high accuracy rate of 99.96% and a low Out of Sample(OOB) error estimate of 0.11%. From Figure *Out-of-bag (OOB) Error Estimate*, we can find that the OOB errors are decreasing as the number of trees increases at the very beginning while keeping relatively constant finally. 
 
-```{r, echo=FALSE, warning=FALSE}
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
 varImp25 <- names(sort(varImp[,6], decreasing=T))[1:25]
 set.seed(1010101010)
 modrf_varImp25 <- randomForest(classe ~. , data=trainS[,c(varImp25, "classe")], importance=T)
 modrf_varImp25
 ```
 
-```{r, OOBPlot, fig.cap="Out-of-bag (OOB) Error Estimate\\label{fig:oobplot}", echo=FALSE, warning=FALSE}
+```{r, OOBPlot, fig.cap="Out-of-bag (OOB) Error Estimate\\label{fig:oobplot}", echo=FALSE, warning=FALSE, message=FALSE}
 plot(modrf_varImp25, main ="Out-of-bag (OOB) error estimate")
 legend("topright", colnames(modrf$err.rate),col=1:6,cex=0.8,fill=1:6)
 ```
@@ -182,7 +196,7 @@ legend("topright", colnames(modrf$err.rate),col=1:6,cex=0.8,fill=1:6)
 ###Prediction
 Sum up, the final model is the random forest with the selected 25 predictors. 
 The final part of this project is to predict the given 20 observations in the test set. 
-```{r, echo=FALSE, warning=FALSE}
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
 predrf_test_varImp25 <- predict(modrf_varImp25, testing[,varImp25], type = "class")
 predrf_test_varImp25
 ```
